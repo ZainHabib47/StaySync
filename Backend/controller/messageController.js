@@ -1,9 +1,5 @@
 import Message from "../models/message.js";
 
-// ============================
-// Send Message
-// ============================
-
 export const sendMessage = async (req, res) => {
   try {
     const senderId = req.user.id;
@@ -15,7 +11,6 @@ export const sendMessage = async (req, res) => {
       message,
     });
 
-    // 🔥 SOCKET EMIT (REAL TIME PART)
     const io = req.app.get("io");
 
     io.to(receiverId).emit("newMessage", newMessage);
@@ -33,9 +28,6 @@ export const sendMessage = async (req, res) => {
   }
 };
 
-// ============================
-// Get Conversation
-// ============================
 
 export const getMessages = async (req, res) => {
   try {

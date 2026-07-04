@@ -7,10 +7,8 @@ export const addFriend = async (req, res) => {
   try {
     const { phoneNumber } = req.body;
 
-    // Logged-in user id (comes from JWT middleware)
     const myId = req.user.id;
 
-    // Find user by phone number
     const friend = await User.findOne({ phoneNumber });
 
     if (!friend) {
@@ -41,7 +39,6 @@ export const addFriend = async (req, res) => {
       });
     }
 
-    // Save friendship
     await FriendCollection.create({
       user: myId,
       friend: friend._id,
