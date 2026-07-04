@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useEffect } from "react";
+import { io } from "socket.io-client";
 
 const App = () => {
   const navigate = useNavigate();
@@ -9,6 +10,12 @@ const App = () => {
   const [friends, setFriends] = useState([]);
   const [showAddFriend, setShowAddFriend] = useState(false);
   const [phoneNumber, setPhoneNumber] = useState("");
+  const [showRemoveModal, setShowRemoveModal] = useState(false);
+  const [selectedFriend, setSelectedFriend] = useState(null);
+  const [search, setSearch] = useState("");
+  const [messages, setMessages] = useState([]);
+  const [message, setMessage] = useState("");
+  const socket = io("http://localhost:5000");
 
   const getFriends = async () => {
     try {
@@ -32,6 +39,38 @@ const App = () => {
     }
   };
 
+  const removeFriend = async () => {
+    try {
+      const token = localStorage.getItem("token");
+
+      const res = await fetch(
+        `http://localhost:5000/api/friends/${selectedFriend.friend._id}`,
+        {
+          method: "DELETE",
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        },
+      );
+
+      const data = await res.json();
+
+      if (!data.success) {
+        alert(data.message);
+        return;
+      }
+
+      alert("Friend Removed Successfully");
+
+      setShowRemoveModal(false);
+      setSelectedFriend(null);
+
+      getFriends();
+    } catch (err) {
+      console.log(err);
+    }
+  };
+
   useEffect(() => {
     const getUser = async () => {
       const token = localStorage.getItem("token");
@@ -48,9 +87,25 @@ const App = () => {
         setUser(data.user);
       }
     };
-
+    console.log(messages);
     getUser();
     getFriends();
+  }, []);
+
+  useEffect(() => {
+    if (user?._id) {
+      socket.emit("joinRoom", user._id);
+    }
+  }, [user]);
+
+  useEffect(() => {
+    socket.on("newMessage", (msg) => {
+      setMessages((prev) => [...prev, msg]);
+    });
+
+    return () => {
+      socket.off("newMessage");
+    };
   }, []);
 
   const addFriend = async () => {
@@ -93,6 +148,54 @@ const App = () => {
     navigate("/");
   };
 
+  const filteredFriends = friends.filter((item) =>
+    item.friend.username.toLowerCase().includes(search.toLowerCase()),
+  );
+
+  const getMessages = async (friendId) => {
+    try {
+      const token = localStorage.getItem("token");
+
+      const res = await fetch(
+        `http://localhost:5000/api/messages/${friendId}`,
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        },
+      );
+
+      const data = await res.json();
+
+      if (data.success) {
+        setMessages(data.messages);
+      }
+    } catch (err) {
+      console.log(err);
+    }
+  };
+
+  const sendMessage = async () => {
+    if (!selectedFriend || !message) return;
+
+    const token = localStorage.getItem("token");
+
+    await fetch("http://localhost:5000/api/messages", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({
+        receiverId: selectedFriend._id,
+        message,
+      }),
+    });
+
+    setMessage("");
+    getMessages(selectedFriend._id); // refresh chat
+  };
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-[#4F46E5] via-[#7C3AED] to-[#2563EB] p-6">
       {/* Background Blur */}
@@ -125,12 +228,13 @@ const App = () => {
 
           {/* Search */}
 
-          <div className="p-5">
-            <input
-              placeholder="Search Friend..."
-              className="w-full rounded-xl bg-white/10 border border-white/20 p-3 text-white placeholder:text-white/40 outline-none"
-            />
-          </div>
+          <input
+            type="text"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Search Friend..."
+            className="w-full rounded-xl bg-white/10 border border-white/20 p-3 text-white placeholder:text-white/40 outline-none"
+          />
 
           {/* Friend List */}
 
@@ -139,18 +243,34 @@ const App = () => {
               No friends added yet.
             </p>
           ) : (
-            friends.map((item) => (
+            filteredFriends.map((item) => (
               <div
                 key={item._id}
-                className="mb-3 rounded-xl bg-white/10 p-4 cursor-pointer hover:bg-white/20 transition"
+                className="mb-3 rounded-xl bg-white/10 p-4 cursor-pointer hover:bg-white/20 transition flex justify-between"
+                onClick={() => {
+                  setSelectedFriend(item.friend);
+                  getMessages(item.friend._id);
+                }}
               >
-                <h2 className="text-white font-semibold">
-                  🟢 {item.friend.username}
-                </h2>
+                <div className="flex flex-col justify-center text-center">
+                  <h2 className="text-white font-semibold">
+                    🟢 {item.friend.username}
+                  </h2>
 
-                <p className="text-cyan-300 text-sm">
-                  {item.friend.phoneNumber}
-                </p>
+                  <p className="text-cyan-300 text-sm">
+                    {item.friend.phoneNumber}
+                  </p>
+                </div>
+
+                <button
+                  onClick={() => {
+                    setSelectedFriend(item);
+                    setShowRemoveModal(true);
+                  }}
+                  className="w-8 h-8 rounded-full bg-red-500 hover:bg-red-600 text-white font-bold"
+                >
+                  ✕
+                </button>
               </div>
             ))
           )}
@@ -166,11 +286,11 @@ const App = () => {
             </button>
           </div>
           <button
-              onClick={logoutUser}
-              className="w-full rounded-xl bg-gradient-to-r from-purple-700 to-blue-600 py-3 text-white font-semibold hover:scale-90 transition"
-            >
-              Log Out
-            </button>
+            onClick={logoutUser}
+            className="w-full rounded-xl bg-gradient-to-r from-purple-700 to-blue-600 py-3 text-white font-semibold hover:scale-90 transition"
+          >
+            Log Out
+          </button>
         </div>
 
         {/* ================= CHAT ================= */}
@@ -178,37 +298,53 @@ const App = () => {
         <div className="flex-1 flex flex-col">
           {/* Header */}
 
-          <div className="h-24 border-b border-white/10 flex items-center px-8">
-            <h2 className="text-3xl text-white font-bold">Select a Friend</h2>
-          </div>
+          <h2 className="text-3xl text-white font-bold">
+            {selectedFriend ? selectedFriend.username : "Select a Friend"}
+          </h2>
 
           {/* Messages */}
 
           <div className="flex-1 overflow-y-auto p-8">
-            <div className="mb-5 w-fit rounded-2xl bg-white/20 px-5 py-3 text-white">
-              Hello 👋
-            </div>
+            {messages.length === 0 && (
+              <p className="text-white/50 text-center mt-10">No messages yet</p>
+            )}
 
-            <div className="ml-auto mb-5 w-fit rounded-2xl bg-gradient-to-r from-purple-600 to-blue-600 px-5 py-3 text-white">
-              Hi ❤️
-            </div>
+            {messages.map((msg) => {
+              const isMe = msg.sender === user._id;
+
+              return (
+                <div
+                  key={msg._id}
+                  className={`mb-3 w-fit max-w-[60%] px-5 py-3 rounded-2xl text-white ${
+                    isMe
+                      ? "ml-auto bg-gradient-to-r from-purple-600 to-blue-600"
+                      : "bg-white/20"
+                  }`}
+                >
+                  {msg.message}
+                </div>
+              );
+            })}
           </div>
 
           {/* Input */}
 
           <div className="border-t border-white/10 p-5 flex gap-4">
             <input
+              value={message}
+              onChange={(e) => setMessage(e.target.value)}
               type="text"
               placeholder="Type your message..."
-              className="flex-1 rounded-full border border-white/20 bg-white/10 px-6 py-4 text-white outline-none placeholder:text-white/50"
+              className="flex-1 rounded-full border border-white/20 bg-white/10 px-6 py-4 text-white outline-none"
             />
 
-            <button className="rounded-full bg-gradient-to-r from-purple-600 to-blue-600 px-8 text-white font-semibold hover:scale-105 transition">
+            <button
+              onClick={sendMessage}
+              className="rounded-full bg-gradient-to-r from-purple-600 to-blue-600 px-8 text-white font-semibold hover:scale-105 transition"
+            >
               Send
             </button>
-            
           </div>
-          
         </div>
       </div>
 
@@ -240,6 +376,43 @@ const App = () => {
                 className="flex-1 rounded-xl bg-gradient-to-r from-purple-600 to-blue-600 py-3 text-white"
               >
                 Add Friend
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showRemoveModal && (
+        <div className="fixed inset-0 bg-black/60 flex justify-center items-center z-50">
+          <div className="w-[420px] rounded-3xl bg-[#1e1e2f] border border-white/10 p-8">
+            <h1 className="text-2xl text-white font-bold text-center">
+              Remove Friend?
+            </h1>
+
+            <p className="text-center text-white/70 mt-4">
+              Are you sure you want to remove
+            </p>
+
+            <p className="text-center text-cyan-300 font-semibold text-xl mt-2">
+              {selectedFriend?.friend.username}
+            </p>
+
+            <div className="flex gap-4 mt-8">
+              <button
+                onClick={() => {
+                  setShowRemoveModal(false);
+                  setSelectedFriend(null);
+                }}
+                className="flex-1 rounded-xl bg-gray-600 py-3 text-white"
+              >
+                Cancel
+              </button>
+
+              <button
+                onClick={removeFriend}
+                className="flex-1 rounded-xl bg-red-500 py-3 text-white hover:bg-red-600"
+              >
+                Remove
               </button>
             </div>
           </div>

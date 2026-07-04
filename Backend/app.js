@@ -7,16 +7,29 @@ import cors from "cors";
 import dotenv from "dotenv"
 import authRoutes from "./routes/authRoute.js"
 import friendRoutes from "./routes/friendRoutes.js"
+import messageRoutes from "./routes/messageRoutes.js"
+import http from "http"
+import { Server } from "socket.io";
 
+dotenv.config();
 
 
 const app = express();
-dotenv.config();
-
 app.use(express.json());
 app.use(cors());
+const server = http.createServer(app);
+
+const io = new Server(server, {
+  cors: {
+    origin: "http://localhost:5173",
+    methods: ["GET", "POST"],
+  },
+});
+app.set("io", io);
+
 app.use("/api/auth",authRoutes)
 app.use("/api/friends",friendRoutes)
+app.use("/api/messages", messageRoutes);
 
 connection();
 
@@ -56,4 +69,20 @@ app.get("/api/showAllMessages",async (req,res)=>{
   }
 })
 
-app.listen(5000, () => console.log("Backend running on port 5000"));
+
+io.on("connection", (socket) => {
+  console.log("User connected:", socket.id);
+
+  // user joins their personal room
+  socket.on("joinRoom", (userId) => {
+    socket.join(userId);
+  });
+
+  socket.on("disconnect", () => {
+    console.log("User disconnected:", socket.id);
+  });
+});
+
+server.listen(5000, () => {
+  console.log("Server running on 5000");
+});

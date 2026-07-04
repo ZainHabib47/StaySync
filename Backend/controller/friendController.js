@@ -1,9 +1,7 @@
 import User from "../models/signup.js";
 import FriendCollection from "../models/friendCollection.js";
 
-// ====================
-// Add Friend
-// ====================
+
 
 export const addFriend = async (req, res) => {
   try {
@@ -84,9 +82,7 @@ export const getFriends = async (req, res) => {
   }
 };
 
-// ====================
-// Remove Friend
-// ====================
+
 
 export const removeFriend = async (req, res) => {
   try {
