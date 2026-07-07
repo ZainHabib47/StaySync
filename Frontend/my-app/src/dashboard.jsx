@@ -2,6 +2,9 @@ import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useEffect } from "react";
 import { io } from "socket.io-client";
+const socket = io("http://localhost:5000", {
+  transports: ["websocket"],
+});
 
 const App = () => {
   const navigate = useNavigate();
@@ -15,7 +18,6 @@ const App = () => {
   const [search, setSearch] = useState("");
   const [messages, setMessages] = useState([]);
   const [message, setMessage] = useState("");
-  const socket = io("http://localhost:5000");
 
   const getFriends = async () => {
     try {
@@ -99,8 +101,11 @@ const App = () => {
   }, [user]);
 
   useEffect(() => {
-    socket.on("newMessage", (msg) => {
-      setMessages((prev) => [...prev, msg]);
+    socket.off("newMessage");
+    socket.on("newMessage", (message) => {
+      console.log("Socket received:", message);
+
+      setMessages((prev) => [...prev, message]);
     });
 
     return () => {

@@ -73,9 +73,10 @@ app.get("/api/showAllMessages",async (req,res)=>{
 io.on("connection", (socket) => {
   console.log("User connected:", socket.id);
 
-  // user joins their personal room
+  // User joins their personal room
   socket.on("joinRoom", (userId) => {
     socket.join(userId);
+    console.log("Joined room:", userId);
   });
 
   socket.on("disconnect", () => {
